@@ -8,6 +8,8 @@ BASE_FEE = 25.00  # USD per shipment
 RATE_PER_KG_KM = 0.0004  # USD per kg per km
 EXPRESS_MULTIPLIER = 1.5
 FUEL_SURCHARGE = 0.08  # 8% on top of everything
+VOLUME_DISCOUNT_THRESHOLD_KG = 1000
+VOLUME_DISCOUNT_RATE = 0.15  # 15% off big shipments
 
 
 class QuoteError(ValueError):
@@ -22,6 +24,9 @@ def quote(weight_kg: float, distance_km: float, express: bool = False) -> float:
         raise QuoteError("distance_km must be positive")
 
     cost = BASE_FEE + weight_kg * distance_km * RATE_PER_KG_KM
+
+    if weight_kg >= VOLUME_DISCOUNT_THRESHOLD_KG:
+        cost -= weight_kg * VOLUME_DISCOUNT_RATE
 
     if express:
         cost *= EXPRESS_MULTIPLIER
