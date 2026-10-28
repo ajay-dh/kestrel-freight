@@ -26,7 +26,7 @@ def quote(weight_kg: float, distance_km: float, express: bool = False) -> float:
     cost = BASE_FEE + weight_kg * distance_km * RATE_PER_KG_KM
 
     if weight_kg >= VOLUME_DISCOUNT_THRESHOLD_KG:
-        cost -= weight_kg * VOLUME_DISCOUNT_RATE
+        cost *= 1 - VOLUME_DISCOUNT_RATE
 
     if express:
         cost *= EXPRESS_MULTIPLIER
