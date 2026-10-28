@@ -1,0 +1,63 @@
+# ─────────────────────────────────────────────────────────────
+# GOLDEN PIPELINE (reusable workflow)
+# Owned by the platform team. Every Python repo calls this one
+# file instead of copy-pasting its own CI. Fix it once here and
+# 500 repos get the fix.
+# ─────────────────────────────────────────────────────────────
+name: Golden Python CI
+
+on:
+  workflow_call:
+    inputs:
+      python-versions:
+        description: JSON list of Python versions to test against
+        type: string
+        default: '["3.12", "3.13", "3.14"]'
+
+permissions:
+  contents: read # least privilege: this pipeline can only read code
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip # reuse downloaded packages between runs
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+
+  test:
+    name: Test (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # show every failing version, not just the first
+      matrix:
+        python: ${{ fromJSON(inputs.python-versions) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt -e .
+      - run: pytest
+
+  preview:
+    name: Rate preview
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: pip install -e .
+      # Business-readable output on the run page, not just logs
+      - run: python -m kestrel.preview >> "$GITHUB_STEP_SUMMARY"
+      # Flag bad prices as annotations: top of the run page + inline on the PR diff
+      - run: python -m kestrel.preview --annotate

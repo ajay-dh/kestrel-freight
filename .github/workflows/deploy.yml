@@ -1,0 +1,74 @@
+# Runs on every merge to main:
+#   quality gate → build once → staging smoke test → human approval → production
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # manual "deploy now" button
+
+permissions:
+  contents: read
+
+# Never run two production deploys at once; queue them instead
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    name: Quality
+    uses: ./.github/workflows/golden-python-ci.yml # same golden pipeline as PRs
+
+  build:
+    name: Build
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: pip install -e .
+      - run: python -m kestrel.site --out _site
+      # Build once; staging and production use this exact artifact
+      - uses: actions/upload-artifact@v7
+        with:
+          name: site
+          path: _site
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  staging:
+    name: Staging smoke test
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: pip install -e .
+      - uses: actions/download-artifact@v8
+        with:
+          name: site
+          path: _site
+      - run: python -m kestrel.smoke _site
+
+  production:
+    name: Production deploy
+    needs: staging
+    runs-on: ubuntu-latest
+    # This environment requires a named approver before the job starts.
+    # The approval (who, when) is recorded in the audit log.
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write # OIDC: short-lived token per job, no stored deploy secrets
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5

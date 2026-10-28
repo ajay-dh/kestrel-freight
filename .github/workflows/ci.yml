@@ -1,0 +1,37 @@
+# Runs on every pull request into main.
+# Branch protection requires "CI passed" to be green before merge.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A new push to the same PR cancels the old run: no wasted minutes
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality
+    uses: ./.github/workflows/golden-python-ci.yml # the platform team's golden pipeline
+    with:
+      python-versions: '["3.12", "3.13", "3.14"]'
+
+  # One stable check name for branch protection, however many jobs run above
+  ci-passed:
+    name: CI passed
+    needs: quality
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate
+        run: |
+          if [ "${{ needs.quality.result }}" != "success" ]; then
+            echo "::error::Quality checks failed. This PR cannot merge."
+            exit 1
+          fi
+          echo "All quality checks passed."
